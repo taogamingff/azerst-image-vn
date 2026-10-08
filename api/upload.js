@@ -1,41 +1,24 @@
 import { handleUpload } from "@vercel/blob/client";
 
-const MAX_SIZE =
-  10 * 1024 * 1024 * 1024;
+const MAX_SIZE = 10 * 1024 * 1024 * 1024;
 
 const ALLOWED_TYPES = [
-
   "image/png",
-
   "image/jpeg",
-
   "image/webp",
-
   "image/gif",
-
   "image/avif"
-
 ];
 
+export default async function handler(req, res) {
 
-export default async function handler(
-  req,
-  res
-) {
+  // =========================
+  // CORS
+  // =========================
 
-  /*
-   * WEBSITE ĐƯỢC PHÉP GỌI API
-   */
-  const allowedOrigin =
-    "https://azerstimagev1.vercel.app";
-
-
-  /*
-   * CORS
-   */
   res.setHeader(
     "Access-Control-Allow-Origin",
-    allowedOrigin
+    "https://azerstimagev1.vercel.app"
   );
 
   res.setHeader(
@@ -53,146 +36,118 @@ export default async function handler(
     "86400"
   );
 
+  // =========================
+  // OPTIONS
+  // =========================
 
-  /*
-   * PREFLIGHT
-   */
-  if(req.method === "OPTIONS"){
-
-    return res
-      .status(204)
-      .end();
-
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
   }
 
+  // =========================
+  // METHOD
+  // =========================
 
-  /*
-   * CHỈ POST
-   */
-  if(req.method !== "POST"){
-
-    return res
-      .status(405)
-      .json({
-        error:
-          "Method Not Allowed"
-      });
-
+  if (req.method !== "POST") {
+    return res.status(405).json({
+      error: "Method Not Allowed"
+    });
   }
 
+  try {
 
-  try{
+    // =========================
+    // BODY
+    // =========================
 
-    const response =
-      await handleUpload({
+    let body = req.body;
 
-        body:
-          req.body,
+    if (typeof body === "string") {
+      body = JSON.parse(body);
+    }
 
-        request:
-          req,
-
-
-        /*
-         * KIỂM TRA FILE
-         */
-        onBeforeGenerateToken:
-          async (pathname) => {
-
-            const extension =
-              pathname
-                .split(".")
-                .pop()
-                ?.toLowerCase();
-
-
-            const allowedExtensions = [
-
-              "png",
-              "jpg",
-              "jpeg",
-              "webp",
-              "gif",
-              "avif"
-
-            ];
-
-
-            if(
-              !allowedExtensions
-                .includes(extension)
-            ){
-
-              throw new Error(
-                "Định dạng ảnh không được hỗ trợ."
-              );
-
-            }
-
-
-            return {
-
-              allowedContentTypes:
-                ALLOWED_TYPES,
-
-              maximumSizeInBytes:
-                MAX_SIZE,
-
-              /*
-               * Không tự thêm chuỗi
-               * vào filename.
-               */
-              addRandomSuffix:
-                false,
-
-              tokenPayload:
-                JSON.stringify({
-                  application:
-                    "azerst-image-vn",
-                  maxSize:
-                    MAX_SIZE
-                })
-
-            };
-
-          },
-
-
-        onUploadCompleted:
-          async ({ blob }) => {
-
-            console.log(
-              "UPLOAD COMPLETE:",
-              blob.url
-            );
-
-          }
-
+    if (!body) {
+      return res.status(400).json({
+        error: "Request body is empty"
       });
+    }
 
+    // =========================
+    // VERCEL BLOB
+    // =========================
 
-    return res
-      .status(200)
-      .json(response);
+    const result = await handleUpload({
+      body,
+      request: req,
 
+      onBeforeGenerateToken: async (pathname) => {
 
-  }catch(error){
+        // Lấy phần mở rộng
+        const extension = pathname
+          .split(".")
+          .pop()
+          ?.toLowerCase();
+
+        const allowedExtensions = [
+          "png",
+          "jpg",
+          "jpeg",
+          "webp",
+          "gif",
+          "avif"
+        ];
+
+        // Kiểm tra đuôi file
+        if (!allowedExtensions.includes(extension)) {
+          throw new Error(
+            "Định dạng ảnh không được hỗ trợ."
+          );
+        }
+
+        return {
+
+          // Chỉ cho phép ảnh
+          allowedContentTypes: ALLOWED_TYPES,
+
+          // Tối đa 10 GB
+          maximumSizeInBytes: MAX_SIZE,
+
+          // Không tự thêm hậu tố
+          addRandomSuffix: false
+        };
+      },
+
+      // =========================
+      // UPLOAD COMPLETE
+      // =========================
+
+      onUploadCompleted: async ({ blob }) => {
+
+        console.log(
+          "UPLOAD COMPLETE:",
+          blob.pathname
+        );
+
+      }
+    });
+
+    // =========================
+    // RESPONSE
+    // =========================
+
+    return res.status(200).json(result);
+
+  } catch (error) {
 
     console.error(
-      "UPLOAD ERROR:",
+      "BLOB UPLOAD ERROR:",
       error
     );
 
-    return res
-      .status(500)
-      .json({
-
-        error:
-          error?.message ||
-          "Upload Error"
-
-      });
-
+    return res.status(500).json({
+      error:
+        error?.message ||
+        "Không thể tạo Client Token"
+    });
   }
-
-     }
+}
